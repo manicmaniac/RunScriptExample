@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+require 'open3'
+require 'xcodeproj'
+
+def set_run_only_for_deployment_postprocessing(project_path, value)
+  project = Xcodeproj::Project.open(PROJECT_PATH)
+  target = project.targets.detect { |target| target.name == 'RunScriptExample' }
+  run_script = target.build_phases.detect { |phase| phase.respond_to?(:name) && phase.name == 'Echo' }
+  run_script.run_only_for_deployment_postprocessing = value ? '1' : '0'
+  project.save
+end
+
+def xcodebuild(actions)
+  args = [
+    'xcodebuild', *actions.split(' '),
+    '-project', PROJECT_PATH,
+    '-scheme', 'RunScriptExample',
+    '-sdk', 'iphonesimulator',
+  ]
+  out, err, status = Open3.capture3(*args)
+  raise err unless status.success?
+
+  out
+end
+
+def check_if_run_script_phase_is_invoked(actions)
+  out = xcodebuild(actions)
+  !out.lines.grep(/foobar\n/).empty?
+end
+
+
+PROJECT_PATH = 'RunScriptExample.xcodeproj'
+ACTIONS = ['build', 'clean build', 'build-for-testing', 'clean build-for-testing', 'archive']
+
+puts "## run_only_for_deployment_postprocessing = false"
+set_run_only_for_deployment_postprocessing(PROJECT_PATH, false)
+puts 'actions|is run script phase invoked'
+puts '-|-'
+ACTIONS.each do |actions|
+  invoked = check_if_run_script_phase_is_invoked(actions)
+  puts "#{actions} | #{invoked}"
+end
+
+puts('-' * 80)
+
+puts "## run_only_for_deployment_postprocessing = true"
+set_run_only_for_deployment_postprocessing(PROJECT_PATH, true)
+puts 'actions|is run script phase invoked'
+puts '-|-'
+ACTIONS.each do |actions|
+  invoked = check_if_run_script_phase_is_invoked(actions)
+  puts "#{actions} | #{invoked}"
+end
